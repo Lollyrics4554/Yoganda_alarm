@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Quiz Alarm System</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+        }
+        .container {
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+        }
+        h1 {
+            color: #4a4a4a;
+            margin-bottom: 1.5rem;
+        }
+        input, button {
+            width: 100%;
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 1rem;
+        }
+        button {
+            background-color: #667eea;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #764ba2;
+        }
+        #output, #quizContainer, #stopwatch {
+            margin-top: 1rem;
+            font-weight: bold;
+        }
+        #quizContainer {
+            display: none;
+            text-align: left;
+        }
+        .quiz-option {
+            display: block;
+            margin: 0.5rem 0;
+            padding: 0.5rem;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .quiz-option:hover {
+            background-color: #f0f0f0;
+        }
+        .quiz-option input {
+            display: none;
+        }
+        .quiz-option.selected {
+            border-color: #667eea;
+            background-color: #e6e9ff;
+        }
+        .quiz-option.correct {
+            border-color: #28a745;
+            background-color: #d4edda;
+        }
+        .quiz-option.wrong {
+            border-color: #ff4757;
+            background-color: #ffe6e6;
+        }
+        .quiz-option.correct::after {
+            content: '✓';
+            color: #28a745;
+            margin-left: 0.5rem;
+        }
+        .quiz-option.wrong::after {
+            content: '✗';
+            color: #ff4757;
+            margin-left: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Dynamic Quiz Alarm</h1>
+        <input type="time" id="alarmTime">
+        <button onclick="setAlarm()">Set Alarm</button>
+        <p id="output"></p>
+        <div id="stopwatch" style="display: none;"></div>
+        <div id="quizContainer"></div>
+    </div>
+
+    <audio id="alarmSound" loop>
+        <source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg">
+        <source src="Yoganda tune.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+
+    <script>
+        let alarmTimeout;
+        let stopwatchInterval;
+        let stopwatchTime = 0;
+        let shakeThreshold = 15;
+        let lastX, lastY, lastZ;
+        let shakeCount = 0;
+        let questionsAnswered = 0;
+        const output = document.getElementById('output');
+        const alarmSound = document.getElementById('alarmSound');
+        const stopwatchDisplay = document.getElementById('stopwatch');
+        const quizContainer = document.getElementById('quizContainer');
+
+        function setAlarm() {
+            const alarmTime = document.getElementById('alarmTime').value;
+            if (alarmTime) {
+                const now = new Date();
+                const alarm = new Date(now.toDateString() + ' ' + alarmTime);
+                
+                if (alarm > now) {
+                    const timeToAlarm = alarm - now;
+                    output.textContent = `Alarm set for ${alarmTime}`;
+                    alarmTimeout = setTimeout(startAlarm, timeToAlarm);
+                } else {
+                    output.textContent = 'Please set a future time';
+                }
+            } else {
+                output.textContent = 'Please set a valid time';
+            }
+        }
+
+        function startAlarm() {
+            alarmSound.play();
+            output.textContent = 'Alarm ringing! Shake your device to start the quiz.';
+            startStopwatch();
+            startShakeDetection();
+        }
+
+        function startStopwatch() {
+            stopwatchDisplay.style.display = 'block';
+            stopwatchInterval = setInterval(() => {
+                stopwatchTime++;
+                stopwatchDisplay.textContent = `Time: ${stopwatchTime} seconds`;
+            }, 1000);
+        }
+
+        function startShakeDetection() {
+            if (window.DeviceMotionEvent) {
+                window.addEventListener('devicemotion', deviceMotionHandler, false);
+            } else {
+                output.textContent = 'Device motion not supported. Please click here to start the quiz.';
+                output.onclick = startQuiz;
+            }
+        }
+
+        function deviceMotionHandler(event) {
+            let accelerationX = event.accelerationIncludingGravity.x;
+            let accelerationY = event.accelerationIncludingGravity.y;
+            let accelerationZ = event.accelerationIncludingGravity.z;
+
+            if (!lastX) {
+                lastX = accelerationX;
+                lastY = accelerationY;
+                lastZ = accelerationZ;
+                return;
+            }
+
+            let deltaX = Math.abs(lastX - accelerationX);
+            let deltaY = Math.abs(lastY - accelerationY);
+            let deltaZ = Math.abs(lastZ - accelerationZ);
+
+            if (deltaX + deltaY + deltaZ > shakeThreshold) {
+                shakeCount++;
+                if (shakeCount >= 3) {
+                    window.removeEventListener('devicemotion', deviceMotionHandler, false);
+                    startQuiz();
+                }
+            }
+
+            lastX = accelerationX;
+            lastY = accelerationY;
+            lastZ = accelerationZ;
+        }
+
+        const quizTopics = {
+            math: {
+                generateQuestion: () => {
+                    const operations = ['+', '-', '*'];
+                    const op = operations[Math.floor(Math.random() * operations.length)];
+                    const num1 = Math.floor(Math.random() * 20) + 1;
+                    const num2 = Math.floor(Math.random() * 20) + 1;
+                    const question = `${num1} ${op} ${num2}`;
+                    const answer = eval(question);
+                    const options = [
+                        answer,
+                        answer + Math.floor(Math.random() * 5) + 1,
+                        answer - Math.floor(Math.random() * 5) - 1,
+                        answer * 2
+                    ].sort(() => Math.random() - 0.5);
+                    return {
+                        question: `What is ${question}?`,
+                        options: options,
+                        correct: options.indexOf(answer)
+                    };
+                }
+            },
+            space: {
+                questions: [
+                    {
+                        question: "Which planet is known as the Red Planet?",
+                        options: ["Mars", "Venus", "Jupiter", "Saturn"],
+                        correct: 0
+                    },
+                    {
+                        question: "What is the largest planet in our solar system?",
+                        options: ["Earth", "Saturn", "Jupiter", "Neptune"],
+                        correct: 2
+                    },
+                    {
+                        question: "Which planet is closest to the Sun?",
+                        options: ["Venus", "Mercury", "Earth", "Mars"],
+                        correct: 1
+                    }
+                ],
+                generateQuestion: function() {
+                    return this.questions[Math.floor(Math.random() * this.questions.length)];
+                }
+            },
+            capitals: {
+                questions: [
+                    {
+                        question: "What is the capital of France?",
+                        options: ["London", "Berlin", "Madrid", "Paris"],
+                        correct: 3
+                    },
+                    {
+                        question: "What is the capital of Japan?",
+                        options: ["Seoul", "Beijing", "Tokyo", "Bangkok"],
+                        correct: 2
+                    },
+                    {
+                        question: "What is the capital of Australia?",
+                        options: ["Sydney", "Melbourne", "Canberra", "Perth"],
+                        correct: 2
+                    }
+                ],
+                generateQuestion: function() {
+                    return this.questions[Math.floor(Math.random() * this.questions.length)];
+                }
+            },
+            funny: {
+                questions: [
+                    {
+                        question: "What do you call a fake noodle?",
+                        options: ["Impasta", "Fauxghetti", "Noodlen't", "Spaghet-no"],
+                        correct: 0
+                    },
+                    {
+                        question: "Why don't scientists trust atoms?",
+                        options: ["They're too small", "They make up everything", "They're unstable", "They're invisible"],
+                        correct: 1
+                    },
+                    {
+                        question: "What do you call a bear with no teeth?",
+                        options: ["Gummy bear", "Toothless wonder", "Smooth bear", "Honey lover"],
+                        correct: 0
+                    }
+                ],
+                generateQuestion: function() {
+                    return this.questions[Math.floor(Math.random() * this.questions.length)];
+                }
+            }
+        };
+
+        function getRandomQuestion() {
+            const topics = Object.keys(quizTopics);
+            const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+            return quizTopics[randomTopic].generateQuestion();
+        }
+
+        function startQuiz() {
+            questionsAnswered = 0;
+            output.textContent = 'Answer 3 questions correctly to stop the alarm!';
+            quizContainer.style.display = 'block';
+            displayQuestion();
+        }
+
+        function displayQuestion() {
+            const question = getRandomQuestion();
+            let quizHTML = `<p>${question.question}</p>`;
+            question.options.forEach((option, i) => {
+                quizHTML += `
+                    <label class="quiz-option">
+                        <input type="radio" name="question" value="${i}">
+                        ${option}
+                    </label>
+                `;
+            });
+            quizHTML += `<button onclick="checkAnswer(${question.correct})">Submit</button>`;
+            quizContainer.innerHTML = quizHTML;
+
+            // Add event listeners for option selection
+            document.querySelectorAll('.quiz-option').forEach(option => {
+                option.addEventListener('click', function() {
+                    document.querySelectorAll('.quiz-option').forEach(opt => opt.classList.remove('selected'));
+                    this.classList.add('selected');
+                    this.querySelector('input').checked = true;
+                });
+            });
+        }
+
+        function checkAnswer(correctIndex) {
+            const selected = document.querySelector('input[name="question"]:checked');
+            if (selected) {
+                const selectedOption = document.querySelectorAll('.quiz-option')[selected.value];
+                const correctOption = document.querySelectorAll('.quiz-option')[correctIndex];
+                
+                if (parseInt(selected.value) === correctIndex) {
+                    selectedOption.classList.add('correct');
+                } else {
+                    selectedOption.classList.add('wrong');
+                    correctOption.classList.add('correct');
+                }
+                
+                questionsAnswered++;
+                
+                if (questionsAnswered >= 3) {
+                    setTimeout(stopAlarm, 1000);
+                } else {
+                    setTimeout(displayQuestion, 1000);
+                }
+            } else {
+                output.textContent = 'Please select an answer.';
+            }
+        }
+
+        function stopAlarm() {
+            alarmSound.pause();
+            alarmSound.currentTime = 0;
+            quizContainer.style.display = 'none';
+            stopwatchDisplay.style.display = 'none';
+            clearInterval(stopwatchInterval);
+            output.textContent = 'Congratulations! You answered 3 questions. Alarm stopped.';
+        }
+    </script>
+</body>
+</html>
